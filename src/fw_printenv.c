@@ -34,7 +34,9 @@ static struct option long_options[] = {
 
 static void usage(char *program, bool setprogram)
 {
+#ifndef NO_DATE
 	fprintf(stdout, "%s (compiled %s)\n", program, __DATE__);
+#endif
 	fprintf(stdout, "Usage %s [OPTION]\n",
 			program);
 	fprintf(stdout,

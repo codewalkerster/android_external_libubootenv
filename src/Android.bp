@@ -1,0 +1,58 @@
+cc_library {
+    name: "libubootenv",
+    include_dirs: [
+        "external/zlib",
+    ],
+    shared_libs: [
+        "libz",
+    ],
+
+    export_include_dirs: ["."],
+    target: {
+        android: {
+            srcs: [
+                "uboot_env.c"
+            ],
+        },
+    },
+}
+
+cc_defaults {
+    name: "fw_default",
+
+    vendor_available: true,
+    include_dirs: [
+        "external/zlib",
+    ],
+    shared_libs: [
+        "libubootenv",
+        "libz",
+    ],
+    local_include_dirs: ["."],
+
+    cflags: [
+        "-std=gnu11",
+        "-include libuboot.h",
+        "-DNO_DATE",
+    ],
+}
+
+cc_binary {
+    name: "fw_printenv",
+    defaults: [ "fw_default" ],
+    target: {
+        android: {
+            srcs: ["fw_printenv.c"]
+        },
+    },
+}
+
+cc_binary {
+    name: "fw_setenv",
+    defaults: [ "fw_default" ],
+    target: {
+        android: {
+            srcs: ["fw_setenv.c"]
+        },
+    },
+}

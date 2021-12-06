@@ -134,7 +134,7 @@ static struct var_entry *__libuboot_get_env(struct vars *envs, const char *varna
 	return NULL;
 }
 
-static void free_var_entry(struct vars *envs, struct var_entry *entry)
+static void free_var_entry(struct var_entry *entry)
 {
 	if (entry) {
 		LIST_REMOVE(entry, next);
@@ -142,15 +142,6 @@ static void free_var_entry(struct vars *envs, struct var_entry *entry)
 		free(entry->value);
 		free(entry);
 	}
-}
-
-static void remove_var(struct vars *envs, const char *varname)
-{
-	struct var_entry *entry;
-
-	entry = __libuboot_get_env(envs, varname);
-
-	free_var_entry(envs, entry);
 }
 
 static enum device_type get_device_type(char *device)
@@ -172,7 +163,7 @@ static int ubi_get_dev_id(char *device)
 	int dev_id = -1;
 	char *sep;
 
-	sep = rindex(device, 'i');
+	sep = strrchr(device, 'i');
 	if (sep)
 		sscanf(sep + 1, "%d", &dev_id);
 
@@ -273,7 +264,7 @@ static int ubi_update_name(struct uboot_flash_env *dev)
 	int dev_id, vol_id, ret = -EBADF;
 	char *sep;
 
-	sep = index(dev->devname, DEVNAME_SEPARATOR);
+	sep = strchr(dev->devname, DEVNAME_SEPARATOR);
 	if (sep)
 	{
 		memset(device, 0, DEVNAME_MAX_LENGTH);
@@ -308,7 +299,7 @@ static int normalize_device_path(char *path, struct uboot_flash_env *dev)
 	 * if volume name is present, split into device path and volume
 	 * since only the device path needs normalized
 	 */
-	sep = index(path, DEVNAME_SEPARATOR);
+	sep = strchr(path, DEVNAME_SEPARATOR);
 	if (sep)
 	{
 		volume_len = strlen(sep);
@@ -347,7 +338,7 @@ static int normalize_device_path(char *path, struct uboot_flash_env *dev)
 	return 0;
 }
 
-static int check_env_device(struct uboot_ctx *ctx, struct uboot_flash_env *dev)
+static int check_env_device(struct uboot_flash_env *dev)
 {
 	int fd, ret;
 	struct stat st;
@@ -450,7 +441,7 @@ static int is_nand_badblock(struct uboot_flash_env *dev, loff_t start)
 	return bad;
 }
 
-static int fileread(struct uboot_flash_env *dev, void *data)
+static int fileread(struct uboot_flash_env *dev, char *data)
 {
 	int ret = 0;
 
@@ -483,7 +474,7 @@ static int fileread(struct uboot_flash_env *dev, void *data)
 	return ret;
 }
 
-static int mtdread(struct uboot_flash_env *dev, void *data)
+static int mtdread(struct uboot_flash_env *dev, char *data)
 {
 	size_t count;
 	size_t blocksize;
@@ -661,7 +652,7 @@ fileprotect_out:
 	return ret;
 }
 
-static int filewrite(struct uboot_flash_env *dev, void *data)
+static int filewrite(struct uboot_flash_env *dev, char *data)
 {
 	int ret = 0;
 
@@ -706,7 +697,7 @@ static int mtdwrite(struct uboot_flash_env *dev, void *data)
 	size_t count;
 	size_t blocksize;
 	loff_t start;
-	void *buf;
+	char *buf;
 	int sectors, skip;
 
 	switch (dev->mtdinfo.type) {
@@ -873,7 +864,7 @@ int libuboot_env_store(struct uboot_ctx *ctx)
 	else
 		offsetdata = offsetof(struct uboot_env_noredund, data);
 
-	data = (uint8_t *)(image + offsetdata);
+	data = (char *)((uint8_t *)image + offsetdata);
 
 	buf = data;
 	LIST_FOREACH(entry, &ctx->varlist, next) {
@@ -920,6 +911,8 @@ int libuboot_env_store(struct uboot_ctx *ctx)
 		case FLAGS_BOOLEAN:
 			flags = 1;
 			break;
+		case FLAGS_NONE:
+			break;
 		}
 		((struct uboot_env_redund *)image)->flags = flags;
 	}
@@ -948,11 +941,10 @@ static int libuboot_load(struct uboot_ctx *ctx)
 {
 	int ret, i;
 	int copies = 1;
-	void *buf[2];
+	uint8_t *buf[2];
 	size_t bufsize, usable_envsize;
 	struct uboot_flash_env *dev;
 	bool crcenv[2];
-	unsigned char flags[2];
 	char *line, *next;
 	uint8_t offsetdata = offsetof(struct uboot_env_noredund, data);
 	uint8_t offsetcrc = offsetof(struct uboot_env_noredund, crc);
@@ -1028,6 +1020,8 @@ static int libuboot_load(struct uboot_ctx *ctx)
 					ctx->envdevs[0].flags == 0)
 					ctx->current = 0;
 				break;
+			case FLAGS_NONE:
+				break;
 			}
 		}
 	}
@@ -1042,7 +1036,7 @@ static int libuboot_load(struct uboot_ctx *ctx)
 	char *flagsvar = NULL;
 
 	if (ctx->valid) {
-		for (line = data; *line; line = next + 1) {
+		for (line = (char *)data; *line; line = next + 1) {
 			char *value;
 
 			/*
@@ -1200,7 +1194,6 @@ int libuboot_read_config(struct uboot_ctx *ctx, const char *config)
 	FILE *fp;
 	char *line = NULL;
 	size_t bufsize = 0;
-	int index = 0;
 	int ret = 0;
 	int ndev = 0;
 	struct uboot_flash_env *dev;
@@ -1256,7 +1249,7 @@ int libuboot_read_config(struct uboot_ctx *ctx, const char *config)
 			free(tmp);
 		}
 
-		if (check_env_device(ctx, dev) < 0) {
+		if (check_env_device(dev) < 0) {
 			retval = -EINVAL;
 			break;
 		}
@@ -1352,7 +1345,7 @@ int libuboot_set_env(struct uboot_ctx *ctx, const char *varname, const char *val
 	if (entry) {
 		if (libuboot_validate_flags(entry, value)) {
 			if (!value) {
-				free_var_entry(envs, entry);
+				free_var_entry(entry);
 			} else {
 				free(entry->value);
 				entry->value = strdup(value);
@@ -1451,7 +1444,7 @@ int libuboot_configure(struct uboot_ctx *ctx,
 			if (!ctx->size)
 				ctx->size = dev->envsize;
 
-			if (check_env_device(ctx, dev) < 0)
+			if (check_env_device(dev) < 0)
 				return -EINVAL;
 
 			if (i > 0) {

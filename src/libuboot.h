@@ -11,6 +11,8 @@ extern "C" {
 
 #pragma once
 
+#include <stdio.h>
+
 struct uboot_ctx;
 
 #define DEVNAME_MAX_LENGTH	256

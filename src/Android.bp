@@ -20,7 +20,6 @@ cc_library {
 cc_defaults {
     name: "fw_default",
 
-    vendor_available: true,
     include_dirs: [
         "external/zlib",
     ],
